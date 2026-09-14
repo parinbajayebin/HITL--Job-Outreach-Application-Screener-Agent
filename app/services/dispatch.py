@@ -30,7 +30,10 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import aiosmtplib
+try:
+    import aiosmtplib
+except ImportError:
+    aiosmtplib = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
