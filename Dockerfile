@@ -28,6 +28,9 @@ COPY --from=builder /install /usr/local
 WORKDIR /app
 COPY . .
 
-# Default: run the FastAPI server
+# Ensure start script has executable permissions
+RUN chmod +x start.sh
+
+# Render binds to $PORT dynamically
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./start.sh"]
