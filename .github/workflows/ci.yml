@@ -46,12 +46,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: actions/setup-buildx-action@v3
-
       - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: hitl-job-screener:latest
+        run: |
+          docker build -t hitl-job-screener:latest .
