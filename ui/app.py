@@ -10,6 +10,7 @@ Run with:
 
 from __future__ import annotations
 
+import io
 import json
 import time
 from typing import Any, Dict, List, Optional
@@ -93,20 +94,51 @@ st.markdown(
 )
 
 
-# ╔═════════════════════════════════════════════════════════════════════════╗
-# ║  Utility helpers                                                       ║
-# ╚═════════════════════════════════════════════════════════════════════════╝
+def _extract_text_from_upload(uploaded_file) -> str:
+    """Extract plain text from uploaded PDF or text file."""
+    if uploaded_file is None:
+        return ""
+    try:
+        raw_bytes = uploaded_file.read()
+        uploaded_file.seek(0)
+        
+        # If text file:
+        if uploaded_file.type == "text/plain" or uploaded_file.name.endswith(".txt"):
+            return raw_bytes.decode("utf-8", errors="replace")
+        
+        # If PDF file:
+        if uploaded_file.name.endswith(".pdf"):
+            try:
+                from pdfminer.high_level import extract_text
+                text = extract_text(io.BytesIO(raw_bytes))
+                if text and text.strip():
+                    return text.strip()
+            except Exception:
+                pass
+            
+            try:
+                import pypdf
+                reader = pypdf.PdfReader(io.BytesIO(raw_bytes))
+                pages = [page.extract_text() or "" for page in reader.pages]
+                return "\n".join(pages).strip()
+            except Exception:
+                pass
+                
+        return raw_bytes.decode("utf-8", errors="replace")
+    except Exception as e:
+        st.warning(f"Could not extract clean text from file: {e}")
+        return ""
 
 
 def _api(method: str, path: str, **kwargs) -> Optional[Dict[str, Any]]:
-    """Call the FastAPI backend.  Returns parsed JSON or ``None`` on error."""
+    """Call the FastAPI backend. Returns parsed JSON or None on error."""
     url = f"{API_BASE}{path}"
     try:
         resp = getattr(requests, method)(url, timeout=30, **kwargs)
         resp.raise_for_status()
         return resp.json()
     except requests.ConnectionError:
-        st.error("⚠️ Cannot reach the API server. Is `uvicorn app.main:app` running?")
+        st.error("⚠️ Cannot reach the API server. Is FastAPI running on port 8000?")
         return None
     except requests.HTTPError as exc:
         st.error(f"API error: {exc.response.status_code} — {exc.response.text}")
@@ -117,7 +149,6 @@ def _api(method: str, path: str, **kwargs) -> Optional[Dict[str, Any]]:
 
 
 def _status_chip(status: str) -> str:
-    """Return an HTML <span> chip for a workflow status."""
     cls = {
         "running": "status-running",
         "scored": "status-scored",
@@ -181,7 +212,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Quick resume thread
     st.subheader("Resume a Thread")
     resume_tid = st.text_input(
         "Thread ID",
@@ -229,11 +259,8 @@ if st.session_state.page == "new_run":
             )
             resume_text_from_upload = ""
             if uploaded is not None:
-                if uploaded.type == "text/plain":
-                    resume_text_from_upload = uploaded.read().decode("utf-8", errors="replace")
-                else:
-                    resume_text_from_upload = uploaded.read().decode("utf-8", errors="replace")
-                st.success(f"Loaded **{uploaded.name}** ({len(resume_text_from_upload):,} chars)")
+                resume_text_from_upload = _extract_text_from_upload(uploaded)
+                st.success(f"Loaded **{uploaded.name}** ({len(resume_text_from_upload):,} characters parsed)")
 
         with paste_tab:
             resume_text_pasted = st.text_area(
@@ -243,7 +270,6 @@ if st.session_state.page == "new_run":
                 label_visibility="collapsed",
             )
 
-        # Merge
         resume_text = resume_text_from_upload or resume_text_pasted
 
     with col2:
@@ -271,10 +297,9 @@ if st.session_state.page == "new_run":
 
     st.divider()
 
-    # Preview
     with st.expander("📋 Preview payload", expanded=False):
         payload = {
-            "resume_text": resume_text[:500] + ("…" if len(resume_text) > 500 else ""),
+            "resume_text": resume_text[:300] + ("…" if len(resume_text) > 300 else ""),
             "strengths": strengths,
             "city": city,
             "role": role,
@@ -282,8 +307,7 @@ if st.session_state.page == "new_run":
         }
         st.json(payload)
 
-    # Submit
-    can_submit = bool(resume_text and strengths and city and role)
+    can_submit = bool(resume_text.strip() and strengths and city.strip() and role.strip())
     submit = st.button(
         "🚀 Start Screening Workflow",
         disabled=not can_submit,
@@ -335,19 +359,16 @@ elif st.session_state.page == "dashboard":
 
     st.markdown(f"**Thread ID:** `{tid}`")
 
-    # Fetch state
     state = _api("get", f"/state/{tid}")
     if state is None:
         st.stop()
     st.session_state.workflow_state = state
 
-    # ── Status Row ──────────────────────────────────────────────────
-    status = state.get("overall_status", state.get("status", "unknown"))
+    status = state.get("overall_status", state.get("status", "running"))
     st.markdown(f"**Status:** {_status_chip(status)}", unsafe_allow_html=True)
 
     st.divider()
 
-    # ── Score Card ──────────────────────────────────────────────────
     match_score = state.get("match_score")
     if match_score is not None:
         col_s, col_e, col_m = st.columns(3)
@@ -378,7 +399,6 @@ elif st.session_state.page == "dashboard":
             for s in missing:
                 st.markdown(f"- ❌ {s}")
 
-    # ── Job Matches Table ───────────────────────────────────────────
     job_matches = state.get("job_matches", [])
     if job_matches:
         st.subheader("🔍 Job Matches")
@@ -401,7 +421,6 @@ elif st.session_state.page == "dashboard":
         else:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # ── Company Insights ────────────────────────────────────────────
     insights = state.get("company_insights")
     if insights:
         st.subheader("🏢 Company Research")
@@ -421,7 +440,6 @@ elif st.session_state.page == "dashboard":
                             for n in info["recent_news"]:
                                 st.markdown(f"- {n}")
 
-    # ── Outreach Drafts ─────────────────────────────────────────────
     draft = state.get("outreach_draft")
     if draft:
         st.subheader("✉️ Outreach Drafts")
@@ -447,14 +465,12 @@ elif st.session_state.page == "dashboard":
                 unsafe_allow_html=True,
             )
 
-        # Key points used
         kp = draft_obj.get("key_points_used", [])
         if kp:
             st.markdown("**Key points highlighted:**")
             st.markdown(" · ".join(f"`{p}`" for p in kp))
 
-    # ── Human Feedback Panel ────────────────────────────────────────
-    if status in ("awaiting_human", "drafted"):
+    if status in ("awaiting_human", "drafted") or draft:
         st.divider()
         st.subheader("🧑‍⚖️ Your Decision")
 
@@ -503,18 +519,16 @@ elif st.session_state.page == "dashboard":
         if revision_count > 0:
             st.caption(f"Revision #{revision_count}")
 
-    # ── Error display ───────────────────────────────────────────────
     error = state.get("error")
     if error:
         st.error(f"⚠️ Workflow error: {error}")
 
-    # ── Auto-refresh ────────────────────────────────────────────────
-    if status in ("running", "initialized", "scored", "jobs_fetched", "research_done"):
+    # Auto-refresh if running
+    if status in ("running", "initialized", "scored", "jobs_fetched", "research_done") and not draft and not error:
         st.caption(f"⏳ Auto-refreshing every {POLL_INTERVAL_SECS}s…")
         time.sleep(POLL_INTERVAL_SECS)
         st.rerun()
 
-    # ── Raw state (debug) ───────────────────────────────────────────
     with st.expander("🔧 Raw State (debug)", expanded=False):
         st.json(state)
 
@@ -532,12 +546,11 @@ elif st.session_state.page == "settings":
         unsafe_allow_html=True,
     )
 
-    # ── LinkedIn Cookie ─────────────────────────────────────────────
     st.subheader("🔐 LinkedIn Selenium Cookie")
 
     st.info(
         "The LinkedIn Selenium cookie (`li_at`) is required for posting "
-        "connection notes from your account via the headless browser.  "
+        "connection notes from your account via the headless browser. "
         "It expires when you log out of LinkedIn or after ~90 days."
     )
 
@@ -581,7 +594,6 @@ elif st.session_state.page == "settings":
 
     st.divider()
 
-    # ── API Server Health ───────────────────────────────────────────
     st.subheader("🏥 API Health Check")
 
     if st.button("Check API Server"):
@@ -601,7 +613,6 @@ elif st.session_state.page == "settings":
 
     st.divider()
 
-    # ── About ───────────────────────────────────────────────────────
     st.subheader("ℹ️ About")
     st.markdown(
         """
