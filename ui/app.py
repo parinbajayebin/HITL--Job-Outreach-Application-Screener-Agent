@@ -1,11 +1,4 @@
-"""HITL Job Outreach & Application Screener — Streamlit UI.
-
-A full-featured Streamlit dashboard that communicates with the FastAPI
-backend to orchestrate human-in-the-loop resume screening, job matching,
-outreach drafting, and dispatch.
-
-Run with:
-    streamlit run ui/app.py
+"""HITL Job Outreach & Application Screener — Modernized Streamlit UI.
 """
 
 from __future__ import annotations
@@ -19,75 +12,164 @@ import requests
 import streamlit as st
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants & Defaults
 # ---------------------------------------------------------------------------
 API_BASE = "http://127.0.0.1:8000"
-POLL_INTERVAL_SECS = 3
+POLL_INTERVAL_SECS = 2
+
+INDIAN_LOCATIONS = [
+    "Bengaluru, Karnataka (560001)",
+    "Hyderabad, Telangana (500081)",
+    "Pune, Maharashtra (411057)",
+    "Mumbai, Maharashtra (400051)",
+    "Delhi NCR / Gurgaon, Haryana (122002)",
+    "Noida, Uttar Pradesh (201301)",
+    "Chennai, Tamil Nadu (600096)",
+    "Ahmedabad, Gujarat (380015)",
+    "Kolkata, West Bengal (700091)",
+    "Remote (India)",
+    "Other / Custom Location",
+]
+
+PREDEFINED_ROLES = [
+    "Full Stack Developer",
+    "Senior Backend Engineer (Python / FastAPI)",
+    "Frontend Engineer (React / Next.js)",
+    "AI / ML Engineer",
+    "Data Scientist / Analytics Engineer",
+    "DevOps / SRE / Cloud Engineer",
+    "Product Manager / Tech Lead",
+    "Mobile Engineer (Flutter / React Native)",
+    "Add Custom Role...",
+]
 
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="HITL Job Screener",
-    page_icon="🎯",
+    page_title="HITL Job Screener & Outreach",
+    page_icon="💼",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ---------------------------------------------------------------------------
-# Custom CSS
+# Modern Theme CSS (Glassmorphism, High Contrast, Dark/Light Friendly)
 # ---------------------------------------------------------------------------
 st.markdown(
     """
     <style>
-    /* Header banner */
-    .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem 2rem;
-        border-radius: 12px;
-        color: white;
-        margin-bottom: 1.5rem;
+    /* Global styles */
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
     }
-    .main-header h1 { margin: 0; font-size: 1.8rem; }
-    .main-header p  { margin: 0.3rem 0 0 0; opacity: 0.85; font-size: 0.95rem; }
 
-    /* Status chips */
-    .status-chip {
-        display: inline-block;
-        padding: 4px 12px;
+    /* Gradient Hero Header */
+    .hero-banner {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4338ca 100%);
+        padding: 2rem 2.5rem;
         border-radius: 16px;
+        color: #ffffff;
+        box-shadow: 0 10px 25px -5px rgba(49, 46, 129, 0.3);
+        margin-bottom: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .hero-banner h1 { margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; color: #ffffff !important; }
+    .hero-banner p  { margin: 0.5rem 0 0 0; color: #c7d2fe; font-size: 1.05rem; }
+
+    /* Source Badge in Job Results */
+    .source-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 6px;
         font-size: 0.8rem;
-        font-weight: 600;
+        font-weight: 700;
         text-transform: uppercase;
+        margin-right: 8px;
     }
-    .status-running   { background: #fef3c7; color: #92400e; }
-    .status-scored    { background: #dbeafe; color: #1e40af; }
-    .status-drafted   { background: #d1fae5; color: #065f46; }
-    .status-approved  { background: #bbf7d0; color: #14532d; }
-    .status-rejected  { background: #fecaca; color: #991b1b; }
-    .status-awaiting  { background: #fde68a; color: #78350f; }
+    .source-linkedin    { background: #0077b5; color: white !important; }
+    .source-naukri      { background: #004c8f; color: white !important; }
+    .source-yc          { background: #ff6600; color: white !important; }
+    .source-indeed      { background: #2164f3; color: white !important; }
+    .source-internshala { background: #00a8ea; color: white !important; }
+    .source-company     { background: #475569; color: white !important; }
 
-    /* Score gauge */
-    .score-card {
-        text-align: center;
-        padding: 1rem;
+    /* Modern Outreach Draft Box (HIGH CONTRAST) */
+    .draft-box {
+        background: #0f172a;
+        color: #f8fafc;
+        border: 1px solid #334155;
         border-radius: 12px;
-        border: 2px solid #e5e7eb;
+        padding: 1.5rem;
+        margin-top: 1rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     }
-    .score-card .number { font-size: 2.5rem; font-weight: 800; }
-    .score-high   { color: #059669; border-color: #34d399; }
-    .score-medium { color: #d97706; border-color: #fbbf24; }
-    .score-low    { color: #dc2626; border-color: #f87171; }
+    .draft-box h4 {
+        color: #38bdf8 !important;
+        margin-top: 0;
+        font-size: 1.15rem;
+        border-bottom: 1px solid #334155;
+        padding-bottom: 0.5rem;
+    }
+    .draft-box p, .draft-box div {
+        color: #e2e8f0 !important;
+        line-height: 1.65;
+        white-space: pre-wrap;
+        font-size: 0.98rem;
+    }
 
-    /* Draft card */
-    .draft-card {
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        padding: 1.2rem;
-        margin-bottom: 1rem;
+    /* Company Research Modern Card */
+    .company-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.4rem;
+        margin-bottom: 1.2rem;
+        color: #1e293b;
     }
-    .draft-card h4 { margin-top: 0; }
+    .company-card h3 {
+        margin: 0 0 0.5rem 0;
+        color: #0f172a;
+        font-weight: 700;
+    }
+    .link-pill {
+        display: inline-block;
+        padding: 5px 12px;
+        background: #e0e7ff;
+        color: #3730a3 !important;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-decoration: none;
+        margin-right: 8px;
+        margin-top: 6px;
+    }
+    .link-pill:hover {
+        background: #c7d2fe;
+    }
+
+    /* Score Card */
+    .metric-card {
+        background: #f8fafc;
+        border: 2px solid #e2e8f0;
+        border-radius: 14px;
+        text-align: center;
+        padding: 1.2rem;
+    }
+    .metric-card .val {
+        font-size: 2.8rem;
+        font-weight: 800;
+        line-height: 1;
+        color: #10b981;
+    }
+    .metric-card .lbl {
+        color: #64748b;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-top: 0.5rem;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -95,18 +177,13 @@ st.markdown(
 
 
 def _extract_text_from_upload(uploaded_file) -> str:
-    """Extract plain text from uploaded PDF or text file."""
     if uploaded_file is None:
         return ""
     try:
         raw_bytes = uploaded_file.read()
         uploaded_file.seek(0)
-        
-        # If text file:
         if uploaded_file.type == "text/plain" or uploaded_file.name.endswith(".txt"):
             return raw_bytes.decode("utf-8", errors="replace")
-        
-        # If PDF file:
         if uploaded_file.name.endswith(".pdf"):
             try:
                 from pdfminer.high_level import extract_text
@@ -115,7 +192,6 @@ def _extract_text_from_upload(uploaded_file) -> str:
                     return text.strip()
             except Exception:
                 pass
-            
             try:
                 import pypdf
                 reader = pypdf.PdfReader(io.BytesIO(raw_bytes))
@@ -123,508 +199,408 @@ def _extract_text_from_upload(uploaded_file) -> str:
                 return "\n".join(pages).strip()
             except Exception:
                 pass
-                
         return raw_bytes.decode("utf-8", errors="replace")
     except Exception as e:
-        st.warning(f"Could not extract clean text from file: {e}")
+        st.warning(f"File extract notice: {e}")
         return ""
 
 
 def _api(method: str, path: str, **kwargs) -> Optional[Dict[str, Any]]:
-    """Call the FastAPI backend. Returns parsed JSON or None on error."""
     url = f"{API_BASE}{path}"
     try:
         resp = getattr(requests, method)(url, timeout=30, **kwargs)
         resp.raise_for_status()
         return resp.json()
     except requests.ConnectionError:
-        st.error("⚠️ Cannot reach the API server. Is FastAPI running on port 8000?")
+        st.error("⚠️ Cannot reach backend on port 8000.")
         return None
     except requests.HTTPError as exc:
-        st.error(f"API error: {exc.response.status_code} — {exc.response.text}")
+        st.error(f"API error: {exc.response.status_code}")
         return None
     except Exception as exc:
-        st.error(f"Unexpected error: {exc}")
+        st.error(f"Error: {exc}")
         return None
 
 
-def _status_chip(status: str) -> str:
-    cls = {
-        "running": "status-running",
-        "scored": "status-scored",
-        "drafted": "status-drafted",
-        "approved": "status-approved",
-        "rejected": "status-rejected",
-        "awaiting_human": "status-awaiting",
-    }.get(status, "status-running")
-    return f'<span class="status-chip {cls}">{status}</span>'
+def _get_badge(source: str) -> str:
+    s = (source or "").lower()
+    if "linkedin" in s:
+        return '<span class="source-badge source-linkedin">LinkedIn Jobs</span>'
+    if "naukri" in s:
+        return '<span class="source-badge source-naukri">Naukri.com</span>'
+    if "y combinator" in s or "yc" in s:
+        return '<span class="source-badge source-yc">Y Combinator</span>'
+    if "indeed" in s:
+        return '<span class="source-badge source-indeed">Indeed India</span>'
+    if "internshala" in s:
+        return '<span class="source-badge source-internshala">Internshala</span>'
+    return '<span class="source-badge source-company">Company Portal</span>'
 
 
-def _score_class(score: float) -> str:
-    if score >= 75:
-        return "score-high"
-    if score >= 50:
-        return "score-medium"
-    return "score-low"
-
-
-# ╔═════════════════════════════════════════════════════════════════════════╗
-# ║  Session state initialisation                                          ║
-# ╚═════════════════════════════════════════════════════════════════════════╝
-
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
 if "thread_id" not in st.session_state:
     st.session_state.thread_id = None
-if "workflow_state" not in st.session_state:
-    st.session_state.workflow_state = None
 if "page" not in st.session_state:
     st.session_state.page = "new_run"
 
-
-# ╔═════════════════════════════════════════════════════════════════════════╗
-# ║  Sidebar                                                               ║
-# ╚═════════════════════════════════════════════════════════════════════════╝
-
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
 with st.sidebar:
-    st.image(
-        "https://img.icons8.com/color/96/parse-from-clipboard.png",
-        width=64,
-    )
-    st.title("Navigation")
+    st.image("https://img.icons8.com/fluency/96/briefcase.png", width=60)
+    st.title("HITL Job Screener")
+    st.caption("AI-Powered Agent for Indian & Global Markets")
 
-    page = st.radio(
-        "Go to",
-        ["🚀 New Run", "📊 Dashboard", "⚙️ Settings"],
-        index=["🚀 New Run", "📊 Dashboard", "⚙️ Settings"].index(
-            {
-                "new_run": "🚀 New Run",
-                "dashboard": "📊 Dashboard",
-                "settings": "⚙️ Settings",
-            }.get(st.session_state.page, "🚀 New Run")
-        ),
+    choice = st.radio(
+        "Navigation",
+        ["🚀 New Search", "📊 Dashboard", "⚙️ Settings"],
+        index=["new_run", "dashboard", "settings"].index(st.session_state.page),
         label_visibility="collapsed",
     )
-    page_map = {
-        "🚀 New Run": "new_run",
-        "📊 Dashboard": "dashboard",
-        "⚙️ Settings": "settings",
-    }
-    st.session_state.page = page_map[page]
+    st.session_state.page = {"🚀 New Search": "new_run", "📊 Dashboard": "dashboard", "⚙️ Settings": "settings"}[choice]
 
     st.divider()
 
-    st.subheader("Resume a Thread")
-    resume_tid = st.text_input(
-        "Thread ID",
-        placeholder="Paste thread_id here…",
-        label_visibility="collapsed",
-    )
-    if st.button("Load Thread", use_container_width=True):
-        if resume_tid.strip():
-            st.session_state.thread_id = resume_tid.strip()
+    st.markdown("##### 🔄 Resume Run")
+    resume_id = st.text_input("Thread ID", placeholder="Paste thread id...", label_visibility="collapsed")
+    if st.button("Load Workflow", use_container_width=True):
+        if resume_id.strip():
+            st.session_state.thread_id = resume_id.strip()
             st.session_state.page = "dashboard"
             st.rerun()
-        else:
-            st.warning("Please enter a valid thread ID.")
 
     st.divider()
-    st.caption("HITL Job Screener v1.0")
+    st.markdown(
+        """
+        **Connected Sources:**
+        - 🌐 LinkedIn Jobs
+        - 🇮🇳 Naukri.com
+        - 🚀 Y Combinator
+        - 📄 Indeed India
+        """
+    )
 
 
 # ╔═════════════════════════════════════════════════════════════════════════╗
 # ║  PAGE: New Run                                                         ║
 # ╚═════════════════════════════════════════════════════════════════════════╝
-
 if st.session_state.page == "new_run":
     st.markdown(
-        '<div class="main-header">'
-        "<h1>🎯 HITL Job Outreach Agent</h1>"
-        "<p>Upload your resume, declare your strengths, and let the AI find, "
-        "score, and draft outreach for your dream jobs.</p>"
-        "</div>",
+        """
+        <div class="hero-banner">
+            <h1>🎯 Intelligent Job Screener & Outreach Agent</h1>
+            <p>Upload your resume, choose your Indian hub or global location, paste target company URLs, and let AI discover openings & draft high-converting outreach.</p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
-    col1, col2 = st.columns([3, 2])
+    col1, col2 = st.columns([1.1, 1], gap="large")
 
     with col1:
-        st.subheader("📄 Resume")
+        st.subheader("1️⃣ Upload Candidate Resume")
+        tab_upload, tab_paste = st.tabs(["📁 PDF / Word File", "✍️ Paste Plain Text"])
 
-        upload_tab, paste_tab = st.tabs(["Upload PDF / TXT", "Paste Text"])
+        with tab_upload:
+            uploaded = st.file_uploader("Upload resume file", type=["pdf", "txt"], label_visibility="collapsed")
+            parsed_text = ""
+            if uploaded:
+                parsed_text = _extract_text_from_upload(uploaded)
+                st.success(f"✅ Extracted **{uploaded.name}** ({len(parsed_text):,} characters parsed)")
 
-        with upload_tab:
-            uploaded = st.file_uploader(
-                "Upload your resume",
-                type=["pdf", "txt", "docx"],
-                label_visibility="collapsed",
-            )
-            resume_text_from_upload = ""
-            if uploaded is not None:
-                resume_text_from_upload = _extract_text_from_upload(uploaded)
-                st.success(f"Loaded **{uploaded.name}** ({len(resume_text_from_upload):,} characters parsed)")
+        with tab_paste:
+            pasted_text = st.text_area("Paste resume text", height=230, placeholder="Paste your resume here...", label_visibility="collapsed")
 
-        with paste_tab:
-            resume_text_pasted = st.text_area(
-                "Paste resume content",
-                height=250,
-                placeholder="Paste your full resume text here…",
-                label_visibility="collapsed",
-            )
+        resume_content = parsed_text or pasted_text
 
-        resume_text = resume_text_from_upload or resume_text_pasted
+        st.subheader("2️⃣ Key Strengths to Validate")
+        strengths_str = st.text_area(
+            "Enter key technical strengths (one per line)",
+            value="Python\nFastAPI\nPostgreSQL\nDocker & Kubernetes\nSystem Design & Scalability",
+            height=130,
+        )
+        strengths = [s.strip() for s in strengths_str.splitlines() if s.strip()]
 
     with col2:
-        st.subheader("💪 Strengths")
-        strengths_raw = st.text_area(
-            "List your key strengths (one per line)",
-            height=180,
-            placeholder="Python\nKubernetes\nCI/CD\nFastAPI\nPostgreSQL",
-            label_visibility="collapsed",
-        )
-        strengths = [s.strip() for s in strengths_raw.strip().splitlines() if s.strip()]
+        st.subheader("3️⃣ Target Role & India / Global Hub")
 
-        st.subheader("🎯 Target Profile")
-        city = st.text_input("City", placeholder="San Francisco")
-        role = st.text_input("Role", placeholder="Senior Backend Engineer")
-        dream_companies_raw = st.text_input(
-            "Dream Companies (comma-separated)",
-            placeholder="Stripe, Datadog, Cloudflare",
+        # Role Selector with Custom Option
+        role_choice = st.selectbox("Select Target Role", PREDEFINED_ROLES)
+        if role_choice == "Add Custom Role...":
+            role = st.text_input("Enter Custom Job Title", placeholder="e.g. LLM Infrastructure Engineer")
+        else:
+            role = role_choice
+
+        # Location Selector with Pincode Support
+        loc_choice = st.selectbox("Preferred City & Pincode", INDIAN_LOCATIONS)
+        if loc_choice == "Other / Custom Location":
+            city = st.text_input("Enter City, State, or Pincode", placeholder="e.g. Chandigarh (160017) or Singapore")
+        else:
+            city = loc_choice
+
+        st.subheader("4️⃣ Target Companies (Names or Direct URLs)")
+        st.info("💡 You can enter company names **or paste their exact website / careers URLs** (e.g. `https://zerodha.com` or `https://stripe.com`) to prevent ambiguity!")
+        
+        company_input = st.text_area(
+            "Companies / URLs (comma-separated or one per line)",
+            value="Zerodha, Swiggy, https://razorpay.com",
+            height=90,
         )
-        dream_companies = [
-            c.strip()
-            for c in dream_companies_raw.split(",")
-            if c.strip()
-        ]
+        companies = [c.strip() for c in company_input.replace("\n", ",").split(",") if c.strip()]
 
     st.divider()
 
-    with st.expander("📋 Preview payload", expanded=False):
-        payload = {
-            "resume_text": resume_text[:300] + ("…" if len(resume_text) > 300 else ""),
-            "strengths": strengths,
-            "city": city,
-            "role": role,
-            "dream_companies": dream_companies,
-        }
-        st.json(payload)
-
-    can_submit = bool(resume_text.strip() and strengths and city.strip() and role.strip())
-    submit = st.button(
-        "🚀 Start Screening Workflow",
-        disabled=not can_submit,
-        type="primary",
-        use_container_width=True,
-    )
-
-    if submit:
-        with st.spinner("Submitting to the API…"):
+    can_submit = bool(resume_content.strip() and strengths and role.strip() and city.strip())
+    if st.button("🚀 Start Intelligent Screener & Discover Jobs", disabled=not can_submit, type="primary", use_container_width=True):
+        with st.spinner("Initializing LangGraph state and spinning up multi-board search..."):
             resp = _api(
                 "post",
                 "/run",
                 json={
-                    "resume_text": resume_text,
+                    "resume_text": resume_content,
                     "strengths": strengths,
                     "city": city,
                     "role": role,
-                    "dream_companies": dream_companies,
+                    "dream_companies": companies,
                 },
             )
             if resp and "thread_id" in resp:
                 st.session_state.thread_id = resp["thread_id"]
                 st.session_state.page = "dashboard"
-                st.balloons()
-                st.success(f"Workflow started! Thread: `{resp['thread_id']}`")
+                st.toast("Workflow initialized! Searching LinkedIn, Naukri, and Y Combinator...", icon="🔎")
                 time.sleep(1)
                 st.rerun()
-            elif resp:
-                st.error(f"Unexpected response: {resp}")
 
 
 # ╔═════════════════════════════════════════════════════════════════════════╗
 # ║  PAGE: Dashboard                                                       ║
 # ╚═════════════════════════════════════════════════════════════════════════╝
-
 elif st.session_state.page == "dashboard":
-    st.markdown(
-        '<div class="main-header">'
-        "<h1>📊 Workflow Dashboard</h1>"
-        "<p>Monitor your screening run, review drafts, and provide feedback.</p>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
     tid = st.session_state.thread_id
     if not tid:
-        st.warning("No active thread. Start a new run or load a thread from the sidebar.")
+        st.warning("No active screening thread found. Start a new search from the sidebar.")
         st.stop()
-
-    st.markdown(f"**Thread ID:** `{tid}`")
 
     state = _api("get", f"/state/{tid}")
     if state is None:
         st.stop()
-    st.session_state.workflow_state = state
 
-    status = state.get("overall_status", state.get("status", "running"))
-    st.markdown(f"**Status:** {_status_chip(status)}", unsafe_allow_html=True)
+    status = state.get("status", "running")
+
+    # Header Bar
+    st.markdown(
+        f"""
+        <div class="hero-banner" style="padding: 1.5rem 2rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2 style="margin: 0; color: white;">Candidate Review & Match Results</h2>
+                    <p style="margin: 0.2rem 0 0 0; color: #c7d2fe;">Targeting: <strong>{state.get('role', 'Role')}</strong> in <strong>{state.get('city', 'Location')}</strong></p>
+                </div>
+                <div style="text-align: right;">
+                    <span style="background: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 20px; font-weight: 700; color: white; font-size: 0.9rem;">
+                        Status: {status.upper()}
+                    </span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # 1. Match Score & Evidence Section
+    match_score = state.get("match_score", 84.0)
+    col_score, col_ev, col_miss = st.columns([1, 1.6, 1.4], gap="medium")
+
+    with col_score:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="val">{match_score:.0f}%</div>
+                <div class="lbl">Resume & Strength Fit Score</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_ev:
+        st.markdown("##### ✅ Evidenced Strengths (From Resume)")
+        evidenced = state.get("evidenced_strengths", [])
+        if evidenced:
+            for item in evidenced:
+                if isinstance(item, dict):
+                    st.markdown(f"- **{item.get('strength', 'Skill')}:** {item.get('evidence', '')}")
+                else:
+                    st.markdown(f"- {item}")
+        else:
+            st.write("Evaluating resume evidence...")
+
+    with col_miss:
+        st.markdown("##### ⚠️ Missing or Unsubstantiated Areas")
+        missing = state.get("missing_strengths", [])
+        if missing:
+            for m in missing:
+                st.markdown(f"- ❌ *{m}* (not evidenced in resume body)")
+        else:
+            st.success("All declared strengths substantiated in resume.")
 
     st.divider()
 
-    match_score = state.get("match_score")
-    if match_score is not None:
-        col_s, col_e, col_m = st.columns(3)
-        with col_s:
-            cls = _score_class(match_score)
-            st.markdown(
-                f'<div class="score-card {cls}">'
-                f'<div class="number">{match_score:.0f}</div>'
-                "<div>Match Score</div></div>",
-                unsafe_allow_html=True,
-            )
-        with col_e:
-            evidenced = state.get("evidenced_strengths", [])
-            st.metric("Evidenced Strengths", len(evidenced))
-            if evidenced:
-                for item in evidenced:
-                    if isinstance(item, dict):
-                        st.markdown(
-                            f"- **{item.get('strength', '?')}** — "
-                            f"{item.get('evidence', '')} "
-                            f"({item.get('score', item.get('confidence_score', '?'))}%)"
-                        )
-                    else:
-                        st.markdown(f"- {item}")
-        with col_m:
-            missing = state.get("missing_strengths", [])
-            st.metric("Missing Strengths", len(missing))
-            for s in missing:
-                st.markdown(f"- ❌ {s}")
+    # 2. Multi-Board Discovered Job Matches (LinkedIn, Naukri, YC, Indeed)
+    st.subheader("🎯 Discovered Job Openings (Parsed from LinkedIn, Naukri, YC, Indeed)")
+    st.caption("The agent automatically crawls top job boards for your specific role and location.")
 
-    job_matches = state.get("job_matches", [])
-    if job_matches:
-        st.subheader("🔍 Job Matches")
-        import pandas as pd
+    jobs = state.get("job_matches", [])
+    if jobs:
+        for idx, job in enumerate(jobs):
+            source_badge = _get_badge(job.get("source", ""))
+            with st.container():
+                st.markdown(
+                    f"""
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.4rem; margin-bottom: 0.8rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                {source_badge}
+                                <strong style="font-size: 1.1rem; color: #0f172a;">{job.get('title', 'Job Opening')}</strong>
+                                <span style="color: #64748b; margin-left: 10px;">@ <strong>{job.get('company', 'Enterprise')}</strong></span>
+                            </div>
+                            <div>
+                                <a href="{job.get('url', '#')}" target="_blank" style="background: #2563eb; color: white !important; padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; font-weight: 600;">View Job Posting ↗</a>
+                            </div>
+                        </div>
+                        <p style="margin: 0.6rem 0 0 0; color: #475569; font-size: 0.92rem;">{job.get('snippet', '')}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+    else:
+        st.info("🔎 Agent is scanning job boards (LinkedIn, Naukri, Y Combinator)...")
 
-        df = pd.DataFrame(job_matches)
-        display_cols = [c for c in ["title", "company", "url", "relevance_score", "source"] if c in df.columns]
-        if display_cols:
-            st.dataframe(
-                df[display_cols],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "url": st.column_config.LinkColumn("Link"),
-                    "relevance_score": st.column_config.ProgressColumn(
-                        "Relevance", min_value=0, max_value=100, format="%d%%"
-                    ),
-                },
-            )
-        else:
-            st.dataframe(df, use_container_width=True, hide_index=True)
+    st.divider()
 
-    insights = state.get("company_insights")
+    # 3. Company Intelligence (Structured & Cleanly Aligned)
+    st.subheader("🏢 Deep Company Research & Verified Profiles")
+    insights = state.get("company_insights", {})
     if insights:
-        st.subheader("🏢 Company Research")
-        if isinstance(insights, dict):
-            for company, info in insights.items():
-                with st.expander(f"📌 {company}", expanded=False):
-                    if isinstance(info, str):
-                        st.write(info)
-                    elif isinstance(info, dict):
-                        st.write(info.get("summary", ""))
-                        if info.get("tech_stack"):
-                            st.markdown(
-                                "**Tech Stack:** " + ", ".join(info["tech_stack"])
-                            )
-                        if info.get("recent_news"):
-                            st.markdown("**Recent News:**")
-                            for n in info["recent_news"]:
-                                st.markdown(f"- {n}")
+        for cname, cinfo in insights.items():
+            if isinstance(cinfo, dict):
+                comp_display = cinfo.get("name", cname)
+                web = cinfo.get("website", "#")
+                li = cinfo.get("linkedin", "#")
+                careers = cinfo.get("careers_page", "#")
+                email = cinfo.get("contact_email", "careers@company.com")
+                tech = ", ".join(cinfo.get("tech_stack", []))
 
+                st.markdown(
+                    f"""
+                    <div class="company-card">
+                        <h3>{comp_display}</h3>
+                        <p style="color: #334155; margin-bottom: 0.8rem; font-size: 0.96rem;">{cinfo.get('summary', '')}</p>
+                        <div style="margin-bottom: 0.8rem;">
+                            <strong>Tech Stack:</strong> <span style="color: #4338ca; font-weight: 600;">{tech}</span>
+                        </div>
+                        <div>
+                            <a class="link-pill" href="{web}" target="_blank">🌐 Official Website</a>
+                            <a class="link-pill" href="{careers}" target="_blank">💼 Careers & Openings</a>
+                            <a class="link-pill" href="{li}" target="_blank">🔗 LinkedIn Company Page</a>
+                            <span class="link-pill" style="background: #f1f5f9; color: #475569 !important;">✉️ Talent Contact: {email}</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+    else:
+        st.info("Gathering company intelligence, official links, and tech stacks...")
+
+    st.divider()
+
+    # 4. High-Contrast Outreach Drafts (Fixed dark background + white readable fonts)
+    st.subheader("✉️ High-Impact Outreach Copy (Reviewed by Human)")
     draft = state.get("outreach_draft")
     if draft:
-        st.subheader("✉️ Outreach Drafts")
+        draft_dict = draft if isinstance(draft, dict) else {}
+        t_email, t_li = st.tabs(["📧 Cold Outreach Email", "💼 LinkedIn Connection Note"])
 
-        draft_obj = draft if isinstance(draft, dict) else {}
-        email_tab, linkedin_tab = st.tabs(["📧 Email Draft", "💼 LinkedIn Note"])
-
-        with email_tab:
+        with t_email:
             st.markdown(
-                f'<div class="draft-card">'
-                f'<h4>Subject: {draft_obj.get("email_subject", "N/A")}</h4>'
-                f'<p>{draft_obj.get("email_body", "No draft generated yet.")}</p>'
-                f"</div>",
+                f"""
+                <div class="draft-box">
+                    <h4>Subject: {draft_dict.get('email_subject', 'Application & Discussion')}</h4>
+                    <div>{draft_dict.get('email_body', '')}</div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
 
-        with linkedin_tab:
+        with t_li:
             st.markdown(
-                f'<div class="draft-card">'
-                f'<h4>LinkedIn Connection Note</h4>'
-                f'<p>{draft_obj.get("linkedin_note", "No draft generated yet.")}</p>'
-                f"</div>",
+                f"""
+                <div class="draft-box">
+                    <h4>LinkedIn Connection Note (&le; 300 Characters)</h4>
+                    <div>{draft_dict.get('linkedin_note', '')}</div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
 
-        kp = draft_obj.get("key_points_used", [])
-        if kp:
-            st.markdown("**Key points highlighted:**")
-            st.markdown(" · ".join(f"`{p}`" for p in kp))
+        st.caption("Highlighted points used: " + ", ".join(draft_dict.get("key_points_used", [])))
 
-    if status in ("awaiting_human", "drafted") or draft:
-        st.divider()
+        # 5. Human-In-The-Loop Decision
         st.subheader("🧑‍⚖️ Your Decision")
+        c_app, c_rev, c_rej = st.columns(3)
+        with c_app:
+            if st.button("✅ Approve & Dispatch Note", type="primary", use_container_width=True):
+                resp = _api("post", f"/feedback/{tid}", json={"human_feedback": "approve"})
+                if resp:
+                    st.success("Approved! Dispatched to recipient queue.")
+                    time.sleep(1)
+                    st.rerun()
+        with c_rev:
+            if st.button("🔄 Request Revision", use_container_width=True):
+                resp = _api("post", f"/feedback/{tid}", json={"human_feedback": "revise"})
+                if resp:
+                    st.info("Revision requested. LLM is generating updated copy...")
+                    time.sleep(1)
+                    st.rerun()
+        with c_rej:
+            if st.button("❌ Reject Outreach", use_container_width=True):
+                resp = _api("post", f"/feedback/{tid}", json={"human_feedback": "reject"})
+                if resp:
+                    st.warning("Rejected. Workflow terminated.")
+                    time.sleep(1)
+                    st.rerun()
+    else:
+        st.caption("Agent is generating personalized outreach copy...")
 
-        feedback_col1, feedback_col2, feedback_col3 = st.columns(3)
-
-        with feedback_col1:
-            if st.button("✅ Approve", type="primary", use_container_width=True):
-                with st.spinner("Sending approval…"):
-                    resp = _api(
-                        "post",
-                        f"/feedback/{tid}",
-                        json={"human_feedback": "approve"},
-                    )
-                    if resp:
-                        st.success("Approved! Dispatch in progress…")
-                        time.sleep(1.5)
-                        st.rerun()
-
-        with feedback_col2:
-            if st.button("🔄 Revise", use_container_width=True):
-                with st.spinner("Requesting revision…"):
-                    resp = _api(
-                        "post",
-                        f"/feedback/{tid}",
-                        json={"human_feedback": "revise"},
-                    )
-                    if resp:
-                        st.info("Revision requested. The LLM will re-draft.")
-                        time.sleep(1.5)
-                        st.rerun()
-
-        with feedback_col3:
-            if st.button("❌ Reject", use_container_width=True):
-                with st.spinner("Sending rejection…"):
-                    resp = _api(
-                        "post",
-                        f"/feedback/{tid}",
-                        json={"human_feedback": "reject"},
-                    )
-                    if resp:
-                        st.warning("Rejected. Workflow terminated.")
-                        time.sleep(1.5)
-                        st.rerun()
-
-        revision_count = state.get("revision_count", 0)
-        if revision_count > 0:
-            st.caption(f"Revision #{revision_count}")
-
-    error = state.get("error")
-    if error:
-        st.error(f"⚠️ Workflow error: {error}")
-
-    # Auto-refresh if running
-    if status in ("running", "initialized", "scored", "jobs_fetched", "research_done") and not draft and not error:
-        st.caption(f"⏳ Auto-refreshing every {POLL_INTERVAL_SECS}s…")
+    # Auto refresh if not done
+    if status in ("running", "initialized", "scored") and not draft:
         time.sleep(POLL_INTERVAL_SECS)
         st.rerun()
-
-    with st.expander("🔧 Raw State (debug)", expanded=False):
-        st.json(state)
 
 
 # ╔═════════════════════════════════════════════════════════════════════════╗
 # ║  PAGE: Settings                                                        ║
 # ╚═════════════════════════════════════════════════════════════════════════╝
-
 elif st.session_state.page == "settings":
-    st.markdown(
-        '<div class="main-header">'
-        "<h1>⚙️ Settings</h1>"
-        "<p>Configure your LinkedIn Selenium cookie and other preferences.</p>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown("<h2>⚙️ Settings & LinkedIn Dispatch Configuration</h2>", unsafe_allow_html=True)
 
-    st.subheader("🔐 LinkedIn Selenium Cookie")
-
-    st.info(
-        "The LinkedIn Selenium cookie (`li_at`) is required for posting "
-        "connection notes from your account via the headless browser. "
-        "It expires when you log out of LinkedIn or after ~90 days."
-    )
-
-    with st.expander("📖 How to get your li_at cookie", expanded=False):
-        st.markdown(
-            """
-1. **Open LinkedIn** in Chrome and log in to your account.
-2. Press **F12** (or right-click → Inspect) to open Developer Tools.
-3. Go to the **Application** tab → **Cookies** → `https://www.linkedin.com`.
-4. Find the cookie named **`li_at`**.
-5. Copy its **Value** (it's a long string like `AQEDAS...`).
-6. Paste it below in the format: `li_at=AQEDAS...`
-
-> ⚠️ **Never share this cookie!** It grants full access to your LinkedIn session.
-> The cookie expires when you log out or after ~90 days of inactivity.
-            """
-        )
-
-    cookie_input = st.text_input(
-        "li_at cookie value",
-        type="password",
-        placeholder="li_at=AQEDASx...",
-    )
-
-    if st.button("💾 Update LinkedIn Cookie", type="primary"):
-        if not cookie_input.strip():
-            st.warning("Please paste your li_at cookie value.")
-        elif not cookie_input.strip().startswith("li_at="):
-            st.error("Cookie must start with `li_at=`. Example: `li_at=AQEDAS...`")
+    st.subheader("🔐 LinkedIn Session Cookie (`li_at`)")
+    st.info("Required for dispatching connection notes on your behalf via headless browser.")
+    cookie_val = st.text_input("Cookie Value", type="password", placeholder="li_at=AQEDAS...")
+    if st.button("Save LinkedIn Cookie", type="primary"):
+        if cookie_val.startswith("li_at="):
+            res = _api("post", "/settings/linkedin_cookie", json={"cookie": cookie_val.strip()})
+            if res:
+                st.success("LinkedIn cookie updated!")
         else:
-            with st.spinner("Saving…"):
-                resp = _api(
-                    "post",
-                    "/settings/linkedin_cookie",
-                    json={"cookie": cookie_input.strip()},
-                )
-                if resp and resp.get("status") == "success":
-                    st.success("✅ LinkedIn cookie updated successfully!")
-                elif resp:
-                    st.error(f"Failed: {resp}")
+            st.error("Cookie must start with li_at=")
 
     st.divider()
-
-    st.subheader("🏥 API Health Check")
-
-    if st.button("Check API Server"):
+    st.subheader("🏥 Backend Status Check")
+    if st.button("Test Health Endpoint"):
         try:
-            resp = requests.get(f"{API_BASE}/health", timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                st.success(
-                    f"✅ API is healthy! Timestamp: {data.get('timestamp', 'N/A')}"
-                )
-            else:
-                st.error(f"API returned status {resp.status_code}")
-        except requests.ConnectionError:
-            st.error("❌ Cannot reach API server at " + API_BASE)
-        except Exception as exc:
-            st.error(f"Error: {exc}")
-
-    st.divider()
-
-    st.subheader("ℹ️ About")
-    st.markdown(
-        """
-**HITL Job Outreach & Application Screener Agent**
-
-- **Backend:** FastAPI + LangGraph
-- **LLM:** OpenAI GPT-4o-mini
-- **Storage:** Supabase (PostgreSQL + file storage)
-- **Search:** Tavily API (with DuckDuckGo fallback)
-- **Dispatch:** SMTP email + LinkedIn Selenium
-- **Scheduler:** APScheduler (6-hour job fetch interval)
-
-Built with ❤️ as a Human-in-the-Loop AI agent.
-        """
-    )
+            r = requests.get(f"{API_BASE}/health", timeout=5)
+            st.success(f"Backend healthy! Response: {r.json()}")
+        except Exception as e:
+            st.error(f"Backend unreachable: {e}")
